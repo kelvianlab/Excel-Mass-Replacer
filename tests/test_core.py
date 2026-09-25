@@ -183,3 +183,70 @@ def test_whole_cell_spares_partial_matches(tmp_path):
     ws = openpyxl.load_workbook(tmp_path / "x.xlsx").active
     assert ws["A1"].value == "Jakarta Selatan"
     assert ws["A2"].value == "Bandung"
+
+
+README_SAMPLE = [
+    "PT Lama Jaya",
+    "pt lama",
+    "Invoice for PT Lama",
+    "PT LAMA",
+    "PT Lama",
+]
+
+
+@pytest.mark.parametrize(
+    "ignore_case,whole_cell,expected,total",
+    [
+        (
+            False,
+            False,
+            ["PT Baru Jaya", "pt lama", "Invoice for PT Baru", "PT LAMA", "PT Baru"],
+            3,
+        ),
+        (
+            True,
+            False,
+            ["PT Baru Jaya", "PT Baru", "Invoice for PT Baru", "PT Baru", "PT Baru"],
+            5,
+        ),
+        (
+            False,
+            True,
+            ["PT Lama Jaya", "pt lama", "Invoice for PT Lama", "PT LAMA", "PT Baru"],
+            1,
+        ),
+        (
+            True,
+            True,
+            ["PT Lama Jaya", "PT Baru", "Invoice for PT Lama", "PT Baru", "PT Baru"],
+            3,
+        ),
+    ],
+)
+def test_readme_worked_example(tmp_path, ignore_case, whole_cell, expected, total):
+    """Locks the option table in the README so the docs cannot drift from reality."""
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    for row, value in enumerate(README_SAMPLE, start=1):
+        ws.cell(row=row, column=1, value=value)
+    wb.save(tmp_path / "s.xlsx")
+
+    result = process_file(
+        tmp_path / "s.xlsx",
+        [Rule("PT Lama", "PT Baru", match_case=not ignore_case, whole_cell=whole_cell)],
+        apply=True,
+        backup=False,
+    )
+
+    ws = openpyxl.load_workbook(tmp_path / "s.xlsx").active
+    actual = [ws.cell(row=r, column=1).value for r in range(1, len(README_SAMPLE) + 1)]
+    assert actual == expected
+    assert result.replacements == total
+
+
+def test_unmatched_file_gets_no_backup(sample_dir):
+    """Documented in the README: files with no match are never rewritten or backed up."""
+    process_file(sample_dir / "book2.xlsx", [Rule("PT Lama", "X")], apply=True)
+    assert not (sample_dir / "book2.xlsx.bak").exists()
