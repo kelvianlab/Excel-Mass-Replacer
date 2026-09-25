@@ -153,3 +153,33 @@ def test_failed_save_leaves_the_original_intact(sample_dir, monkeypatch):
     assert path.read_bytes() == before
     assert not list(sample_dir.glob("*.emr-tmp"))
     assert not list(sample_dir.glob("*.bak"))
+
+
+def test_empty_replacement_deletes_the_text(tmp_path):
+    """Documented in the README: an empty replacement removes the search text."""
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    wb.active["A1"] = "DRAFT - laporan tahunan"
+    wb.save(tmp_path / "x.xlsx")
+    process_file(tmp_path / "x.xlsx", [Rule("DRAFT - ", "")], apply=True)
+    assert openpyxl.load_workbook(tmp_path / "x.xlsx").active["A1"].value == (
+        "laporan tahunan"
+    )
+
+
+def test_whole_cell_spares_partial_matches(tmp_path):
+    """Documented in the README: the Jakarta / Jakarta Selatan example."""
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws["A1"] = "Jakarta Selatan"
+    ws["A2"] = "Jakarta"
+    wb.save(tmp_path / "x.xlsx")
+    process_file(
+        tmp_path / "x.xlsx", [Rule("Jakarta", "Bandung", whole_cell=True)], apply=True
+    )
+    ws = openpyxl.load_workbook(tmp_path / "x.xlsx").active
+    assert ws["A1"].value == "Jakarta Selatan"
+    assert ws["A2"].value == "Bandung"

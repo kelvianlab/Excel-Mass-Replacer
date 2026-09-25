@@ -57,8 +57,44 @@ If you would rather fill in two boxes than type a command:
 python -m excel_mass_replacer.gui
 ```
 
-Pick the folder, type what to find and what to replace it with, press
-**Preview (safe)** to see what would change, then **Replace now** to do it.
+### Step by step
+
+1. **Click `Browse…` and pick the folder that holds your Excel files.**
+   The box does not start on the right folder — it opens wherever you launched
+   the app from, which is usually the app's own folder. That folder contains no
+   spreadsheets, so a run started there just reports
+   *"No .xlsx, .xlsm or .xls files found in…"*. Point it at your own files.
+2. **Type the text in `Find`, and what should take its place in `Replace with`.**
+   Leave `Replace with` empty to delete the text instead of replacing it.
+3. **Press `Preview (safe)` first.** Nothing is written. The log lists every file
+   that would change and how many replacements each one would get.
+4. **Read the numbers before you commit to them.** If the count is far higher
+   than you expected, your search text is matching more than you meant — see
+   `Whole cell only` below, adjust, and preview again.
+5. **Press `Replace now`.** You will get a confirmation dialog showing the folder,
+   the two texts, and whether backups are on. Nothing happens until you accept it.
+
+### The four checkboxes
+
+The defaults are the safe ones. You only need to change them for specific jobs.
+
+| Option | Default | What it changes |
+|---|---|---|
+| **Include subfolders** | on | Also processes Excel files inside folders within the folder you picked. Turn it off to limit the run to that one folder. |
+| **Ignore case** | off | Off, `PT Lama` matches only `PT Lama`. On, it also matches `pt lama` and `PT LAMA`. |
+| **Whole cell only** | off | Off, the text is replaced wherever it appears inside a cell. On, a cell only changes when its entire contents are exactly the search text. |
+| **Keep .bak backup** | on | Saves a `.bak` copy next to every file it changes. Leave this on until you have checked the result — it is the only way back. |
+
+**`Whole cell only`, concretely.** Searching for `Jakarta` with it **off** turns a
+cell reading `Jakarta Selatan` into `<your replacement> Selatan`. With it **on**,
+that cell is left alone and only cells reading exactly `Jakarta` are replaced.
+Turn it on whenever your search text is also a piece of some longer value.
+
+### On your first run
+
+Copy a handful of your spreadsheets into an empty folder and run the tool there
+first. Once you have seen it do the right thing on those, point it at the real
+folder. This is worth the two minutes for any tool that edits many files at once.
 
 ## Use it — command line
 
@@ -91,6 +127,11 @@ python -m excel_mass_replacer "PT Lama" "PT Baru" -d "C:\path\to\folder" --apply
 ```
 
 Run it inside the folder itself and you can drop `-d` entirely.
+
+`-d` must point at the folder holding your spreadsheets, not at the folder you
+unpacked this tool into. Leave the replacement empty (`""`) to delete the search
+text rather than replace it. The same first-run advice applies here: try it on a
+copy of a few files before pointing it at the real folder.
 
 ### Options
 
