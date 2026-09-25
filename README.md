@@ -78,34 +78,34 @@ python -m excel_mass_replacer.gui
 
 The defaults are the safe ones. You only need to change them for specific jobs.
 
-Say one spreadsheet holds these five cells, and you search for `PT Lama` and
-replace it with `PT Baru`:
+Say one spreadsheet holds these five cells, and you search for `Acme` and
+replace it with `Globex`:
 
 | | A |
 |---|---|
-| **1** | `PT Lama Jaya` |
-| **2** | `pt lama` |
-| **3** | `Invoice for PT Lama` |
-| **4** | `PT LAMA` |
-| **5** | `PT Lama` |
+| **1** | `Acme Holdings` |
+| **2** | `acme` |
+| **3** | `Invoice for Acme` |
+| **4** | `ACME` |
+| **5** | `Acme` |
 
 Here is what each setting actually does to those cells. These are real results
 from running the tool, not an illustration:
 
 | Cell before | Default | `Ignore case` | `Whole cell only` | Both on |
 |---|---|---|---|---|
-| `PT Lama Jaya` | **PT Baru** Jaya | **PT Baru** Jaya | — | — |
-| `pt lama` | — | **PT Baru** | — | **PT Baru** |
-| `Invoice for PT Lama` | Invoice for **PT Baru** | Invoice for **PT Baru** | — | — |
-| `PT LAMA` | — | **PT Baru** | — | **PT Baru** |
-| `PT Lama` | **PT Baru** | **PT Baru** | **PT Baru** | **PT Baru** |
+| `Acme Holdings` | **Globex** Holdings | **Globex** Holdings | — | — |
+| `acme` | — | **Globex** | — | **Globex** |
+| `Invoice for Acme` | Invoice for **Globex** | Invoice for **Globex** | — | — |
+| `ACME` | — | **Globex** | — | **Globex** |
+| `Acme` | **Globex** | **Globex** | **Globex** | **Globex** |
 | **Replacements** | **3** | **5** | **1** | **3** |
 
 A dash means the cell was left exactly as it was.
 
 #### `Ignore case` — whether capitals matter
 
-- **Off (default):** only `PT Lama` matches. `pt lama` and `PT LAMA` are skipped,
+- **Off (default):** only `Acme` matches. `acme` and `ACME` are skipped,
   because the capitals differ.
 - **On:** all three spellings count as the same text, so all of them are replaced.
   That is why the total goes from 3 to 5.
@@ -115,14 +115,14 @@ inconsistent.
 
 #### `Whole cell only` — whether the cell must match exactly
 
-- **Off (default):** the text is found *inside* the cell. `PT Lama Jaya` is
-  replaced, because it contains `PT Lama`.
+- **Off (default):** the text is found *inside* the cell. `Acme Holdings` is
+  replaced, because it contains `Acme`.
 - **On:** a cell is replaced only when its entire contents are exactly
-  `PT Lama`, with nothing before or after. Only cell A5 qualifies, so the total
+  `Acme`, with nothing before or after. Only cell A5 qualifies, so the total
   drops to 1.
 
 Turn it on when your search text is also part of longer values you must not
-touch. Searching for `Jakarta` with this off rewrites `Jakarta Selatan` too;
+touch. Searching for `York` with this off turns `New York` into `New Boston`;
 with it on, that cell is left alone.
 
 #### `Include subfolders` — how deep the search goes
@@ -160,7 +160,7 @@ folder. This is worth the two minutes for any tool that edits many files at once
 Always preview first. This changes nothing:
 
 ```bash
-python -m excel_mass_replacer "PT Lama" "PT Baru" -d "C:\path\to\folder"
+python -m excel_mass_replacer "Acme" "Globex" -d "C:\path\to\folder"
 ```
 
 ```
@@ -182,7 +182,7 @@ Finished in 1.41s
 Happy with it? Add `--apply`:
 
 ```bash
-python -m excel_mass_replacer "PT Lama" "PT Baru" -d "C:\path\to\folder" --apply
+python -m excel_mass_replacer "Acme" "Globex" -d "C:\path\to\folder" --apply
 ```
 
 Run it inside the folder itself and you can drop `-d` entirely.
@@ -216,9 +216,9 @@ copy of a few files before pointing it at the real folder.
 Put one `find`<kbd>Tab</kbd>`replace` rule per line in a plain text file:
 
 ```
-PT Lama	PT Baru
-Jl. Alamat Lama	Jl. Alamat Baru
-0812-0000-0000	0812-1111-1111
+Acme	Globex
+12 Old Street	480 New Avenue
++1-555-0100	+1-555-0199
 ```
 
 ```bash
@@ -234,7 +234,7 @@ pass over each file.
 from excel_mass_replacer import Rule, discover_files, run
 
 files = discover_files("./invoices")
-summary = run(files, [Rule("PT Lama", "PT Baru")], apply=True)
+summary = run(files, [Rule("Acme", "Globex")], apply=True)
 
 print(summary.total_replacements, "replacements")
 for result in summary.failed_files:
