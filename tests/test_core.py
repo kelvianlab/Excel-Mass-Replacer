@@ -17,7 +17,7 @@ def test_discover_non_recursive(sample_dir):
 
 def test_dry_run_changes_nothing(sample_dir):
     before = (sample_dir / "book1.xlsx").read_bytes()
-    result = process_file(sample_dir / "book1.xlsx", [Rule("PT Lama", "PT Baru")])
+    result = process_file(sample_dir / "book1.xlsx", [Rule("Acme", "Globex")])
     assert result.replacements == 2
     assert result.written is False
     assert (sample_dir / "book1.xlsx").read_bytes() == before
@@ -25,49 +25,49 @@ def test_dry_run_changes_nothing(sample_dir):
 
 def test_apply_writes_and_backs_up(sample_dir):
     path = sample_dir / "book1.xlsx"
-    result = process_file(path, [Rule("PT Lama", "PT Baru")], apply=True)
+    result = process_file(path, [Rule("Acme", "Globex")], apply=True)
     assert result.written and result.backup.exists()
     ws = openpyxl.load_workbook(path).active
-    assert ws["A1"].value == "PT Baru Jaya"
-    assert ws["A2"].value == "invoice for PT Baru"
+    assert ws["A1"].value == "Globex Holdings"
+    assert ws["A2"].value == "invoice for Globex"
     assert ws["A3"].value == 12345
-    assert ws["A5"].value == '=CONCATENATE("PT Lama",A1)'
+    assert ws["A5"].value == '=CONCATENATE("Acme",A1)'
 
 
 def test_ignore_case(sample_dir):
     result = process_file(
-        sample_dir / "book1.xlsx", [Rule("pt lama", "X", match_case=False)]
+        sample_dir / "book1.xlsx", [Rule("acme", "X", match_case=False)]
     )
     assert result.replacements == 3
 
 
 def test_whole_cell(sample_dir):
     result = process_file(
-        sample_dir / "book1.xlsx", [Rule("PT Lama Jaya", "X", whole_cell=True)]
+        sample_dir / "book1.xlsx", [Rule("Acme Holdings", "X", whole_cell=True)]
     )
     assert result.replacements == 1
 
 
 def test_include_formulas(sample_dir):
     path = sample_dir / "book1.xlsx"
-    process_file(path, [Rule("PT Lama", "PT Baru")], apply=True, include_formulas=True)
+    process_file(path, [Rule("Acme", "Globex")], apply=True, include_formulas=True)
     assert openpyxl.load_workbook(path).active["A5"].value == (
-        '=CONCATENATE("PT Baru",A1)'
+        '=CONCATENATE("Globex",A1)'
     )
 
 
 def test_sheet_names(sample_dir):
     path = sample_dir / "book1.xlsx"
-    process_file(path, [Rule("Lama", "Baru")], apply=True, include_sheet_names=True)
-    assert "Data PT Baru" in openpyxl.load_workbook(path).sheetnames
+    process_file(path, [Rule("Acme", "Globex")], apply=True, include_sheet_names=True)
+    assert "Data Globex" in openpyxl.load_workbook(path).sheetnames
 
 
 def test_legacy_xls(sample_dir):
     path = sample_dir / "legacy.xls"
-    result = process_file(path, [Rule("PT Lama", "PT Baru")], apply=True)
+    result = process_file(path, [Rule("Acme", "Globex")], apply=True)
     assert result.written
     sheet = xlrd.open_workbook(path).sheet_by_index(0)
-    assert sheet.cell_value(0, 0) == "PT Baru legacy"
+    assert sheet.cell_value(0, 0) == "Globex legacy"
     assert sheet.cell_value(1, 0) == 42
 
 
@@ -106,7 +106,7 @@ def test_regex_mode(tmp_path):
 
 def test_corrupt_file_does_not_stop_the_batch(sample_dir):
     (sample_dir / "broken.xlsx").write_bytes(b"this is not a zip archive")
-    summary = run(discover_files(sample_dir), [Rule("PT Lama", "PT Baru")], apply=True)
+    summary = run(discover_files(sample_dir), [Rule("Acme", "Globex")], apply=True)
     assert len(summary.failed_files) == 1
     assert summary.failed_files[0].path.name == "broken.xlsx"
     assert summary.total_replacements == 4
@@ -114,7 +114,7 @@ def test_corrupt_file_does_not_stop_the_batch(sample_dir):
 
 def test_run_is_idempotent(sample_dir):
     files = discover_files(sample_dir)
-    rules = [Rule("PT Lama", "PT Baru")]
+    rules = [Rule("Acme", "Globex")]
     first = run(files, rules, apply=True)
     second = run(files, rules, apply=True)
     assert first.total_replacements > 0
@@ -123,7 +123,7 @@ def test_run_is_idempotent(sample_dir):
 
 def test_no_backup_flag(sample_dir):
     result = process_file(
-        sample_dir / "book1.xlsx", [Rule("PT Lama", "X")], apply=True, backup=False
+        sample_dir / "book1.xlsx", [Rule("Acme", "X")], apply=True, backup=False
     )
     assert result.backup is None
     assert not (sample_dir / "book1.xlsx.bak").exists()
@@ -132,7 +132,7 @@ def test_no_backup_flag(sample_dir):
 def test_unchanged_file_is_not_rewritten(sample_dir):
     path = sample_dir / "book2.xlsx"
     before = path.stat().st_mtime_ns
-    result = process_file(path, [Rule("PT Lama", "X")], apply=True)
+    result = process_file(path, [Rule("Acme", "X")], apply=True)
     assert result.written is False
     assert path.stat().st_mtime_ns == before
 
@@ -147,7 +147,7 @@ def test_failed_save_leaves_the_original_intact(sample_dir, monkeypatch):
         raise OSError("disk full")
 
     monkeypatch.setattr(openpyxl.Workbook, "save", boom)
-    result = process_file(path, [Rule("PT Lama", "PT Baru")], apply=True)
+    result = process_file(path, [Rule("Acme", "Globex")], apply=True)
 
     assert "disk full" in result.error
     assert path.read_bytes() == before
@@ -160,37 +160,50 @@ def test_empty_replacement_deletes_the_text(tmp_path):
     import openpyxl
 
     wb = openpyxl.Workbook()
-    wb.active["A1"] = "DRAFT - laporan tahunan"
+    wb.active["A1"] = "DRAFT - annual report"
     wb.save(tmp_path / "x.xlsx")
     process_file(tmp_path / "x.xlsx", [Rule("DRAFT - ", "")], apply=True)
     assert openpyxl.load_workbook(tmp_path / "x.xlsx").active["A1"].value == (
-        "laporan tahunan"
+        "annual report"
     )
 
 
 def test_whole_cell_spares_partial_matches(tmp_path):
-    """Documented in the README: the Jakarta / Jakarta Selatan example."""
+    """Documented in the README: the York / New York warning."""
     import openpyxl
 
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws["A1"] = "Jakarta Selatan"
-    ws["A2"] = "Jakarta"
+    ws["A1"] = "New York"
+    ws["A2"] = "York"
     wb.save(tmp_path / "x.xlsx")
     process_file(
-        tmp_path / "x.xlsx", [Rule("Jakarta", "Bandung", whole_cell=True)], apply=True
+        tmp_path / "x.xlsx", [Rule("York", "Boston", whole_cell=True)], apply=True
     )
     ws = openpyxl.load_workbook(tmp_path / "x.xlsx").active
-    assert ws["A1"].value == "Jakarta Selatan"
-    assert ws["A2"].value == "Bandung"
+    assert ws["A1"].value == "New York"
+    assert ws["A2"].value == "Boston"
+
+
+def test_partial_match_rewrites_longer_values(tmp_path):
+    """The other half of the README warning: without whole_cell, New York changes."""
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    wb.active["A1"] = "New York"
+    wb.save(tmp_path / "x.xlsx")
+    process_file(tmp_path / "x.xlsx", [Rule("York", "Boston")], apply=True)
+    assert openpyxl.load_workbook(tmp_path / "x.xlsx").active["A1"].value == (
+        "New Boston"
+    )
 
 
 README_SAMPLE = [
-    "PT Lama Jaya",
-    "pt lama",
-    "Invoice for PT Lama",
-    "PT LAMA",
-    "PT Lama",
+    "Acme Holdings",
+    "acme",
+    "Invoice for Acme",
+    "ACME",
+    "Acme",
 ]
 
 
@@ -200,25 +213,25 @@ README_SAMPLE = [
         (
             False,
             False,
-            ["PT Baru Jaya", "pt lama", "Invoice for PT Baru", "PT LAMA", "PT Baru"],
+            ["Globex Holdings", "acme", "Invoice for Globex", "ACME", "Globex"],
             3,
         ),
         (
             True,
             False,
-            ["PT Baru Jaya", "PT Baru", "Invoice for PT Baru", "PT Baru", "PT Baru"],
+            ["Globex Holdings", "Globex", "Invoice for Globex", "Globex", "Globex"],
             5,
         ),
         (
             False,
             True,
-            ["PT Lama Jaya", "pt lama", "Invoice for PT Lama", "PT LAMA", "PT Baru"],
+            ["Acme Holdings", "acme", "Invoice for Acme", "ACME", "Globex"],
             1,
         ),
         (
             True,
             True,
-            ["PT Lama Jaya", "PT Baru", "Invoice for PT Lama", "PT Baru", "PT Baru"],
+            ["Acme Holdings", "Globex", "Invoice for Acme", "Globex", "Globex"],
             3,
         ),
     ],
@@ -235,7 +248,7 @@ def test_readme_worked_example(tmp_path, ignore_case, whole_cell, expected, tota
 
     result = process_file(
         tmp_path / "s.xlsx",
-        [Rule("PT Lama", "PT Baru", match_case=not ignore_case, whole_cell=whole_cell)],
+        [Rule("Acme", "Globex", match_case=not ignore_case, whole_cell=whole_cell)],
         apply=True,
         backup=False,
     )
@@ -248,5 +261,5 @@ def test_readme_worked_example(tmp_path, ignore_case, whole_cell, expected, tota
 
 def test_unmatched_file_gets_no_backup(sample_dir):
     """Documented in the README: files with no match are never rewritten or backed up."""
-    process_file(sample_dir / "book2.xlsx", [Rule("PT Lama", "X")], apply=True)
+    process_file(sample_dir / "book2.xlsx", [Rule("Acme", "X")], apply=True)
     assert not (sample_dir / "book2.xlsx.bak").exists()
