@@ -74,21 +74,80 @@ python -m excel_mass_replacer.gui
 5. **Press `Replace now`.** You will get a confirmation dialog showing the folder,
    the two texts, and whether backups are on. Nothing happens until you accept it.
 
-### The four checkboxes
+### The four checkboxes, with a worked example
 
 The defaults are the safe ones. You only need to change them for specific jobs.
 
-| Option | Default | What it changes |
-|---|---|---|
-| **Include subfolders** | on | Also processes Excel files inside folders within the folder you picked. Turn it off to limit the run to that one folder. |
-| **Ignore case** | off | Off, `PT Lama` matches only `PT Lama`. On, it also matches `pt lama` and `PT LAMA`. |
-| **Whole cell only** | off | Off, the text is replaced wherever it appears inside a cell. On, a cell only changes when its entire contents are exactly the search text. |
-| **Keep .bak backup** | on | Saves a `.bak` copy next to every file it changes. Leave this on until you have checked the result — it is the only way back. |
+Say one spreadsheet holds these five cells, and you search for `PT Lama` and
+replace it with `PT Baru`:
 
-**`Whole cell only`, concretely.** Searching for `Jakarta` with it **off** turns a
-cell reading `Jakarta Selatan` into `<your replacement> Selatan`. With it **on**,
-that cell is left alone and only cells reading exactly `Jakarta` are replaced.
-Turn it on whenever your search text is also a piece of some longer value.
+| | A |
+|---|---|
+| **1** | `PT Lama Jaya` |
+| **2** | `pt lama` |
+| **3** | `Invoice for PT Lama` |
+| **4** | `PT LAMA` |
+| **5** | `PT Lama` |
+
+Here is what each setting actually does to those cells. These are real results
+from running the tool, not an illustration:
+
+| Cell before | Default | `Ignore case` | `Whole cell only` | Both on |
+|---|---|---|---|---|
+| `PT Lama Jaya` | **PT Baru** Jaya | **PT Baru** Jaya | — | — |
+| `pt lama` | — | **PT Baru** | — | **PT Baru** |
+| `Invoice for PT Lama` | Invoice for **PT Baru** | Invoice for **PT Baru** | — | — |
+| `PT LAMA` | — | **PT Baru** | — | **PT Baru** |
+| `PT Lama` | **PT Baru** | **PT Baru** | **PT Baru** | **PT Baru** |
+| **Replacements** | **3** | **5** | **1** | **3** |
+
+A dash means the cell was left exactly as it was.
+
+#### `Ignore case` — whether capitals matter
+
+- **Off (default):** only `PT Lama` matches. `pt lama` and `PT LAMA` are skipped,
+  because the capitals differ.
+- **On:** all three spellings count as the same text, so all of them are replaced.
+  That is why the total goes from 3 to 5.
+
+Turn it on when the data was typed by different people and the capitalisation is
+inconsistent.
+
+#### `Whole cell only` — whether the cell must match exactly
+
+- **Off (default):** the text is found *inside* the cell. `PT Lama Jaya` is
+  replaced, because it contains `PT Lama`.
+- **On:** a cell is replaced only when its entire contents are exactly
+  `PT Lama`, with nothing before or after. Only cell A5 qualifies, so the total
+  drops to 1.
+
+Turn it on when your search text is also part of longer values you must not
+touch. Searching for `Jakarta` with this off rewrites `Jakarta Selatan` too;
+with it on, that cell is left alone.
+
+#### `Include subfolders` — how deep the search goes
+
+Given this layout, with the folder picker pointed at `invoices`:
+
+```
+invoices/
+├── jan.xlsx
+├── feb.xlsx
+└── archive/
+    └── 2023.xlsx
+```
+
+- **On (default):** all three files are processed, `archive/2023.xlsx` included.
+- **Off:** only `jan.xlsx` and `feb.xlsx`; the `archive` folder is skipped.
+
+#### `Keep .bak backup` — your way back
+
+- **On (default):** every file that changes gets a copy saved beside it first, so
+  the folder ends up with `jan.xlsx` (changed) and `jan.xlsx.bak` (the original).
+  To undo, delete the changed file and rename the `.bak` back.
+- **Off:** no copies are kept and the change cannot be undone from inside the tool.
+
+Files with no match are never rewritten, so they never get a `.bak` either.
 
 ### On your first run
 
