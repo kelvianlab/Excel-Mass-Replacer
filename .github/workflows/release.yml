@@ -4,6 +4,11 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, without the leading v (e.g. 1.1.0)"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -84,12 +89,27 @@ jobs:
             dist/ExcelMassReplacer.exe
             dist/excel-mass-replacer.exe
 
-      - name: Attach the executables to the release
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Publish the release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: >-
+            ${{ inputs.version && format('v{0}', inputs.version) || github.ref_name }}
+          name: >-
+            Excel Mass Replacer
+            ${{ inputs.version || github.ref_name }}
           draft: false
           generate_release_notes: true
+          body: |
+            Download **ExcelMassReplacer.exe** below and double-click it.
+            No Python, no installation, no Microsoft Excel needed.
+
+            Windows SmartScreen will say "Windows protected your PC" the first
+            time, because these binaries are not code-signed. Click **More
+            info**, then **Run anyway**. Both files were built from this commit
+            by GitHub Actions and smoke-tested against a real .xlsx and .xls
+            before being published.
+
+            `excel-mass-replacer.exe` is the same tool for the command line.
           files: |
             dist/ExcelMassReplacer.exe
             dist/excel-mass-replacer.exe
