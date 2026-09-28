@@ -11,8 +11,8 @@ pure data, so the run is silent, repeatable, and finishes in seconds.
 **Measured on this project's own benchmark:** 50 workbooks, 300,000 matching cells,
 replaced and saved in **5.9 seconds** on a 4-core machine.
 
-**On Windows you do not need Python at all** —
-[download `ExcelMassReplacer.exe`](https://github.com/kelvianlab/Excel-Mass-Replacer/releases/latest)
+**On Windows you do not need Python at all** — download
+[`ExcelMassReplacer-App.exe`](https://github.com/kelvianlab/Excel-Mass-Replacer/releases/latest)
 and double-click it.
 
 ---
@@ -40,14 +40,22 @@ and double-click it.
 
 ## Download for Windows — no Python, no typing
 
-Grab **`ExcelMassReplacer.exe`** from the
-[latest release](https://github.com/kelvianlab/Excel-Mass-Replacer/releases/latest)
-and double-click it. Nothing to install, nothing to set up: Python and every
-library are already inside the file. Put it anywhere — Desktop, a USB stick, a
-network drive — and it runs from there.
+Go to the
+[latest release](https://github.com/kelvianlab/Excel-Mass-Replacer/releases/latest).
+Under **Assets** you will see four files. This is what each one is:
 
-Also on that page is `excel-mass-replacer.exe`, the same tool as a command-line
-program, for anyone who wants to script it. Most people want the first one.
+| File | What it is | Do you want it? |
+|---|---|---|
+| **`ExcelMassReplacer-App.exe`** | The app. Double-click it and a window opens. | ✅ **Yes — download this one** |
+| `ExcelMassReplacer-CommandLine.exe` | Same tool, typed commands instead of a window. | Only if you script or schedule things |
+| `Source code (zip)` | The programming files. Added automatically by GitHub. | No |
+| `Source code (tar.gz)` | The same files, in the format Mac and Linux prefer. | No |
+
+**In short: download `ExcelMassReplacer-App.exe` and ignore the rest.**
+
+Nothing to install and nothing to set up — Python and every library it needs are
+already inside that one file. Put it anywhere you like (Desktop, a USB stick, a
+shared drive) and it runs from there.
 
 ### Windows will warn you the first time
 
@@ -95,7 +103,7 @@ pip install .
 
 ```bash
 pip install pyinstaller
-pyinstaller --clean --noconfirm --onefile --windowed --name ExcelMassReplacer --paths . packaging/gui_entry.py
+pyinstaller --clean --noconfirm --onefile --windowed --name ExcelMassReplacer-App --paths . packaging/gui_entry.py
 ```
 
 The result lands in `dist/`. Run this on Windows: PyInstaller builds for the
@@ -103,7 +111,7 @@ system it runs on, so a Windows `.exe` has to be built on Windows.
 
 ## Use it — desktop window
 
-Double-click **`ExcelMassReplacer.exe`**, or from a source checkout:
+Double-click **`ExcelMassReplacer-App.exe`**, or from a source checkout:
 
 ```bash
 python -m excel_mass_replacer.gui
@@ -217,8 +225,8 @@ Always preview first. This changes nothing:
 python -m excel_mass_replacer "Acme" "Globex" -d "C:\path\to\folder"
 ```
 
-Downloaded the Windows build instead? Use `excel-mass-replacer.exe` in place of
-`python -m excel_mass_replacer` — every option below is identical.
+Downloaded the Windows build instead? Use `ExcelMassReplacer-CommandLine.exe` in
+place of `python -m excel_mass_replacer` — every option below is identical.
 
 ```
 Scanning 128 file(s) in C:\path\to\folder

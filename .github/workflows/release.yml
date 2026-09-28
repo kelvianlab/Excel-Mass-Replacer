@@ -34,12 +34,12 @@ jobs:
       - name: Build the desktop app
         run: >
           pyinstaller --clean --noconfirm --onefile --windowed
-          --name ExcelMassReplacer --paths . packaging/gui_entry.py
+          --name ExcelMassReplacer-App --paths . packaging/gui_entry.py
 
       - name: Build the command-line app
         run: >
           pyinstaller --clean --noconfirm --onefile --console
-          --name excel-mass-replacer --paths . packaging/cli_entry.py
+          --name ExcelMassReplacer-CommandLine --paths . packaging/cli_entry.py
 
       - name: Smoke-test the built executable end to end
         shell: pwsh
@@ -53,8 +53,8 @@ jobs:
           b = xlwt.Workbook(); s = b.add_sheet('S'); s.write(0, 0, 'Acme legacy')
           b.save('smoke/old.xls')
           "@
-          .\dist\excel-mass-replacer.exe --version
-          .\dist\excel-mass-replacer.exe "Acme" "Globex" -d smoke --apply --no-backup -q
+          .\dist\ExcelMassReplacer-CommandLine.exe --version
+          .\dist\ExcelMassReplacer-CommandLine.exe "Acme" "Globex" -d smoke --apply --no-backup -q
           python -c @"
           import openpyxl, xlrd, sys
           x = openpyxl.load_workbook('smoke/modern.xlsx').active
@@ -69,13 +69,13 @@ jobs:
       - name: Check the desktop app starts without crashing
         shell: pwsh
         run: |
-          $p = Start-Process -FilePath .\dist\ExcelMassReplacer.exe -PassThru
+          $p = Start-Process -FilePath .\dist\ExcelMassReplacer-App.exe -PassThru
           Start-Sleep -Seconds 10
           if ($p.HasExited) {
-            throw "ExcelMassReplacer.exe exited on its own with code $($p.ExitCode)"
+            throw "ExcelMassReplacer-App.exe exited on its own with code $($p.ExitCode)"
           }
-          $count = (Get-Process ExcelMassReplacer -ErrorAction SilentlyContinue).Count
-          Write-Host "ExcelMassReplacer processes running: $count"
+          $count = (Get-Process ExcelMassReplacer-App -ErrorAction SilentlyContinue).Count
+          Write-Host "ExcelMassReplacer-App processes running: $count"
           if ($count -gt 2) {
             throw "Runaway process spawning: $count copies of the app are running"
           }
@@ -86,8 +86,8 @@ jobs:
         with:
           name: ExcelMassReplacer-windows
           path: |
-            dist/ExcelMassReplacer.exe
-            dist/excel-mass-replacer.exe
+            dist/ExcelMassReplacer-App.exe
+            dist/ExcelMassReplacer-CommandLine.exe
 
       - name: Publish the release
         uses: softprops/action-gh-release@v2
@@ -100,16 +100,36 @@ jobs:
           draft: false
           generate_release_notes: true
           body: |
-            Download **ExcelMassReplacer.exe** below and double-click it.
-            No Python, no installation, no Microsoft Excel needed.
+            ## Which file do I download?
 
-            Windows SmartScreen will say "Windows protected your PC" the first
-            time, because these binaries are not code-signed. Click **More
-            info**, then **Run anyway**. Both files were built from this commit
-            by GitHub Actions and smoke-tested against a real .xlsx and .xls
-            before being published.
+            ### 👉 `ExcelMassReplacer-App.exe` — this one
 
-            `excel-mass-replacer.exe` is the same tool for the command line.
+            **Almost everybody wants this file.** Download it, double-click it,
+            and a window opens. No Python, no installation, no Microsoft Excel.
+            Everything it needs is already inside the file.
+
+            ### `ExcelMassReplacer-CommandLine.exe` — only if you type commands
+
+            The same tool with no window, driven by typed commands instead.
+            Useful for scheduling or scripting. If that does not sound like
+            something you want, ignore this file.
+
+            ### `Source code (zip)` and `(tar.gz)`
+
+            Added automatically by GitHub. These are **not** the app — they are
+            the programming files. You do not need them to use the tool.
+
+            ---
+
+            ### The first time you run it
+
+            Windows will say **"Windows protected your PC"**. That is because
+            the file is not code-signed, not because anything is wrong with it.
+            Click **More info**, then **Run anyway**. You are only asked once.
+
+            Both executables were built from this exact commit by GitHub
+            Actions, and run against a real .xlsx and a real .xls file to
+            confirm they work before this release was published.
           files: |
-            dist/ExcelMassReplacer.exe
-            dist/excel-mass-replacer.exe
+            dist/ExcelMassReplacer-App.exe
+            dist/ExcelMassReplacer-CommandLine.exe
