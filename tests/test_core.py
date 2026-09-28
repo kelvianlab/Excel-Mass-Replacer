@@ -263,3 +263,19 @@ def test_unmatched_file_gets_no_backup(sample_dir):
     """Documented in the README: files with no match are never rewritten or backed up."""
     process_file(sample_dir / "book2.xlsx", [Rule("Acme", "X")], apply=True)
     assert not (sample_dir / "book2.xlsx.bak").exists()
+
+
+def test_falls_back_to_sequential_when_workers_cannot_start(sample_dir, monkeypatch):
+    """A frozen windowed build may fail to spawn workers; the run must still finish."""
+    import excel_mass_replacer.core as core
+
+    def no_pool(*args, **kwargs):
+        raise OSError("cannot spawn worker processes")
+
+    monkeypatch.setattr(core, "ProcessPoolExecutor", no_pool)
+    files = discover_files(sample_dir)
+    summary = core.run(files, [Rule("Acme", "Globex")], apply=True, workers=4)
+
+    assert len(summary.results) == len(files)
+    assert summary.total_replacements == 4
+    assert not summary.failed_files

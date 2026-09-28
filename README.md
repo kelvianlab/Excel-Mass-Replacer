@@ -11,6 +11,10 @@ pure data, so the run is silent, repeatable, and finishes in seconds.
 **Measured on this project's own benchmark:** 50 workbooks, 300,000 matching cells,
 replaced and saved in **5.9 seconds** on a 4-core machine.
 
+**On Windows you do not need Python at all** —
+[download `ExcelMassReplacer.exe`](https://github.com/kelvianlab/Excel-Mass-Replacer/releases/latest)
+and double-click it.
+
 ---
 
 ## What it does
@@ -24,6 +28,7 @@ replaced and saved in **5.9 seconds** on a 4-core machine.
   instead of aborting the whole batch.
 - Runs every CPU core in parallel.
 - Never launches Excel, never shows a dialog, never waits for a click.
+- Ships as a single Windows `.exe` that needs no Python and no installation.
 
 ## What it does not do
 
@@ -33,8 +38,45 @@ replaced and saved in **5.9 seconds** on a 4-core machine.
 
 ---
 
-## Install
+## Download for Windows — no Python, no typing
 
+Grab **`ExcelMassReplacer.exe`** from the
+[latest release](https://github.com/kelvianlab/Excel-Mass-Replacer/releases/latest)
+and double-click it. Nothing to install, nothing to set up: Python and every
+library are already inside the file. Put it anywhere — Desktop, a USB stick, a
+network drive — and it runs from there.
+
+Also on that page is `excel-mass-replacer.exe`, the same tool as a command-line
+program, for anyone who wants to script it. Most people want the first one.
+
+### Windows will warn you the first time
+
+The executables are not code-signed — a signing certificate costs a few hundred
+dollars a year, which this project does not have. So Windows SmartScreen shows
+**"Windows protected your PC"** the first time you run it. That warning means
+"this file is not signed and not yet widely downloaded", not "this file is
+harmful".
+
+To continue: click **More info**, then **Run anyway**. You will only be asked
+once per machine.
+
+If you would rather not take that on trust, you do not have to. Every release is
+built by GitHub Actions from the source in this repository — you can read the
+[build workflow](.github/workflows/release.yml), see the exact commit it was
+built from on the release page, and build it yourself with the steps below.
+
+### What is in the file
+
+| | |
+|---|---|
+| Size | roughly 30–40 MB — that is Python plus the Excel libraries bundled in |
+| Needs | Windows 10 or 11, 64-bit. Nothing else |
+| Internet | never used. The tool only touches the folder you point it at |
+| Microsoft Excel | not required, and never launched |
+
+## Install from source
+
+For macOS and Linux, or if you would rather run the Python directly.
 Requires Python 3.9 or newer.
 
 ```bash
@@ -49,13 +91,25 @@ Or install it as a command you can run from anywhere:
 pip install .
 ```
 
+### Build the Windows executable yourself
+
+```bash
+pip install pyinstaller
+pyinstaller --clean --noconfirm --onefile --windowed --name ExcelMassReplacer --paths . packaging/gui_entry.py
+```
+
+The result lands in `dist/`. Run this on Windows: PyInstaller builds for the
+system it runs on, so a Windows `.exe` has to be built on Windows.
+
 ## Use it — desktop window
 
-If you would rather fill in two boxes than type a command:
+Double-click **`ExcelMassReplacer.exe`**, or from a source checkout:
 
 ```bash
 python -m excel_mass_replacer.gui
 ```
+
+Either way you get the same window: fill in two boxes and press a button.
 
 ### Step by step
 
@@ -162,6 +216,9 @@ Always preview first. This changes nothing:
 ```bash
 python -m excel_mass_replacer "Acme" "Globex" -d "C:\path\to\folder"
 ```
+
+Downloaded the Windows build instead? Use `excel-mass-replacer.exe` in place of
+`python -m excel_mass_replacer` — every option below is identical.
 
 ```
 Scanning 128 file(s) in C:\path\to\folder

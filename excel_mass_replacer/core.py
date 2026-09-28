@@ -10,6 +10,7 @@ import os
 import re
 import shutil
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Iterable, Iterator, Sequence
@@ -327,24 +328,35 @@ def run(
     ]
 
     if workers == 1:
-        for args in payload:
-            result = _worker(args)
-            summary.results.append(result)
-            if progress:
-                progress(result)
-        return summary
+        return _run_sequentially(payload, summary, progress)
 
-    with ProcessPoolExecutor(max_workers=workers) as pool:
-        futures = {pool.submit(_worker, args): args[0] for args in payload}
-        for future in as_completed(futures):
-            try:
-                result = future.result()
-            except Exception as exc:
-                result = FileResult(
-                    path=futures[future], error=f"{type(exc).__name__}: {exc}"
-                )
-            summary.results.append(result)
-            if progress:
-                progress(result)
+    try:
+        with ProcessPoolExecutor(max_workers=workers) as pool:
+            futures = {pool.submit(_worker, args): args[0] for args in payload}
+            for future in as_completed(futures):
+                try:
+                    result = future.result()
+                except Exception as exc:
+                    result = FileResult(
+                        path=futures[future], error=f"{type(exc).__name__}: {exc}"
+                    )
+                summary.results.append(result)
+                if progress:
+                    progress(result)
+    except (OSError, RuntimeError, BrokenProcessPool):
+        # Starting worker processes can fail outright — a frozen windowed build
+        # with no console, a locked-down machine. The work still has to finish.
+        summary.results.clear()
+        return _run_sequentially(payload, summary, progress)
+
     summary.results.sort(key=lambda r: str(r.path))
+    return summary
+
+
+def _run_sequentially(payload, summary: RunSummary, progress) -> RunSummary:
+    for args in payload:
+        result = _worker(args)
+        summary.results.append(result)
+        if progress:
+            progress(result)
     return summary

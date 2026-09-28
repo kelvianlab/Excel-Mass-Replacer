@@ -1,0 +1,95 @@
+name: build-windows-exe
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pyinstaller
+
+      - name: Run the test suite first
+        run: |
+          pip install pytest
+          python -m pytest tests -q
+
+      - name: Build the desktop app
+        run: >
+          pyinstaller --clean --noconfirm --onefile --windowed
+          --name ExcelMassReplacer --paths . packaging/gui_entry.py
+
+      - name: Build the command-line app
+        run: >
+          pyinstaller --clean --noconfirm --onefile --console
+          --name excel-mass-replacer --paths . packaging/cli_entry.py
+
+      - name: Smoke-test the built executable end to end
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path smoke | Out-Null
+          python -c @"
+          import openpyxl, xlwt
+          wb = openpyxl.Workbook(); ws = wb.active
+          ws['A1'] = 'Acme Holdings'; ws['A2'] = 'Invoice for Acme'; ws['A3'] = 123
+          wb.save('smoke/modern.xlsx')
+          b = xlwt.Workbook(); s = b.add_sheet('S'); s.write(0, 0, 'Acme legacy')
+          b.save('smoke/old.xls')
+          "@
+          .\dist\excel-mass-replacer.exe --version
+          .\dist\excel-mass-replacer.exe "Acme" "Globex" -d smoke --apply --no-backup -q
+          python -c @"
+          import openpyxl, xlrd, sys
+          x = openpyxl.load_workbook('smoke/modern.xlsx').active
+          legacy = xlrd.open_workbook('smoke/old.xls').sheet_by_index(0).cell_value(0, 0)
+          assert x['A1'].value == 'Globex Holdings', x['A1'].value
+          assert x['A2'].value == 'Invoice for Globex', x['A2'].value
+          assert x['A3'].value == 123, x['A3'].value
+          assert legacy == 'Globex legacy', legacy
+          print('smoke test passed: xlsx and xls both rewritten by the frozen exe')
+          "@
+
+      - name: Check the desktop app starts without crashing
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath .\dist\ExcelMassReplacer.exe -PassThru
+          Start-Sleep -Seconds 10
+          if ($p.HasExited) {
+            throw "ExcelMassReplacer.exe exited on its own with code $($p.ExitCode)"
+          }
+          $count = (Get-Process ExcelMassReplacer -ErrorAction SilentlyContinue).Count
+          Write-Host "ExcelMassReplacer processes running: $count"
+          if ($count -gt 2) {
+            throw "Runaway process spawning: $count copies of the app are running"
+          }
+          Stop-Process -Id $p.Id -Force
+          Write-Host "desktop app started, stayed up, and did not multiply"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ExcelMassReplacer-windows
+          path: |
+            dist/ExcelMassReplacer.exe
+            dist/excel-mass-replacer.exe
+
+      - name: Attach the executables to the release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: false
+          generate_release_notes: true
+          files: |
+            dist/ExcelMassReplacer.exe
+            dist/excel-mass-replacer.exe
