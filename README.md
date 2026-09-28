@@ -69,7 +69,7 @@ built from on the release page, and build it yourself with the steps below.
 
 | | |
 |---|---|
-| Size | roughly 30–40 MB — that is Python plus the Excel libraries bundled in |
+| Size | about 13 MB — that is Python plus the Excel libraries bundled in |
 | Needs | Windows 10 or 11, 64-bit. Nothing else |
 | Internet | never used. The tool only touches the folder you point it at |
 | Microsoft Excel | not required, and never launched |
