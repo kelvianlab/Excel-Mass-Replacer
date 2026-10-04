@@ -203,6 +203,54 @@ def test_a_later_run_ignores_the_backup_folder(tmp_path, workbook):
     )
 
 
+VBA_PROJECT = b"\xd0\xcf\x11\xe0-pretend-this-is-a-compiled-macro-project\x00\x01"
+
+
+@pytest.fixture
+def macro_workbook(tmp_path, workbook):
+    """A macro-enabled workbook, the way Excel stores one.
+
+    The macros live in a single binary part, `xl/vbaProject.bin`, that nothing
+    here needs to understand. Copying it across unread is exactly the point.
+    """
+    path = tmp_path / "po.xlsm"
+    with zipfile.ZipFile(workbook) as source:
+        items = [(info, source.read(info.filename)) for info in source.infolist()]
+    with zipfile.ZipFile(path, "w") as target:
+        for info, data in items:
+            if info.filename == "[Content_Types].xml":
+                text = data.decode("utf-8").replace(
+                    "application/vnd.openxmlformats-officedocument"
+                    ".spreadsheetml.sheet.main+xml",
+                    "application/vnd.ms-excel.sheet.macroEnabled.main+xml",
+                ).replace(
+                    "</Types>",
+                    '<Override PartName="/xl/vbaProject.bin" '
+                    'ContentType="application/vnd.ms-office.vbaProject"/></Types>',
+                )
+                data = text.encode("utf-8")
+            target.writestr(info, data)
+        target.writestr("xl/vbaProject.bin", VBA_PROJECT)
+    workbook.unlink()
+    return path
+
+
+def test_macros_survive_in_an_xlsm(macro_workbook):
+    result = process_file(
+        macro_workbook, [Rule("PT Lama", "PT Baru")], apply=True, backup=False
+    )
+    assert result.written
+
+    after = _parts(macro_workbook)
+    assert after["xl/vbaProject.bin"] == VBA_PROJECT, "the macro project was damaged"
+    assert openpyxl.load_workbook(macro_workbook)["PO"]["A1"].value == "PT Baru"
+    assert openpyxl.load_workbook(macro_workbook, data_only=True)["PO"]["A4"].value == 111
+
+
+def test_xlsm_is_picked_up_by_a_scan(tmp_path, macro_workbook):
+    assert [p.name for p in discover_files(tmp_path)] == ["po.xlsm"]
+
+
 def test_running_twice_leaves_the_cached_result_alone(workbook):
     rules = [Rule("PT Lama", "PT Baru")]
     process_file(workbook, rules, apply=True, backup=False)
