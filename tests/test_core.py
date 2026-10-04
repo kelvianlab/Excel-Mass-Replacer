@@ -2,7 +2,13 @@ import openpyxl
 import pytest
 import xlrd
 
-from excel_mass_replacer.core import Rule, discover_files, process_file, run
+from excel_mass_replacer.core import (
+    BACKUP_DIR_NAME,
+    Rule,
+    discover_files,
+    process_file,
+    run,
+)
 
 
 def test_discover_skips_lock_and_non_excel(sample_dir):
@@ -138,21 +144,22 @@ def test_unchanged_file_is_not_rewritten(sample_dir):
 
 
 def test_failed_save_leaves_the_original_intact(sample_dir, monkeypatch):
-    import openpyxl
+    from excel_mass_replacer import xlsx_edit
 
     path = sample_dir / "book1.xlsx"
     before = path.read_bytes()
 
-    def boom(self, target):
+    def boom(parts, dest):
         raise OSError("disk full")
 
-    monkeypatch.setattr(openpyxl.Workbook, "save", boom)
+    monkeypatch.setattr(xlsx_edit, "write_package", boom)
     result = process_file(path, [Rule("Acme", "Globex")], apply=True)
 
     assert "disk full" in result.error
     assert path.read_bytes() == before
     assert not list(sample_dir.glob("*.emr-tmp"))
-    assert not list(sample_dir.glob("*.bak"))
+    assert not list(sample_dir.rglob("book1.xlsx.bak"))
+    assert not list(sample_dir.rglob(f"{BACKUP_DIR_NAME}/**/book1.xlsx"))
 
 
 def test_empty_replacement_deletes_the_text(tmp_path):

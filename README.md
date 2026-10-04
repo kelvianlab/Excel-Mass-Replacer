@@ -23,7 +23,13 @@ and double-click it.
   (and its subfolders, unless you say otherwise).
 - Handles `.xlsx`, `.xlsm` (macro-enabled, macros kept) and legacy `.xls`.
 - **Previews by default.** Nothing is written until you explicitly ask for it.
-- Keeps a `.bak` copy of every file it changes, unless you turn that off.
+- Copies every file it changes into one backup folder first, under its own name,
+  unless you turn that off.
+- **Leaves the rest of the workbook exactly as it found it** in `.xlsx`/`.xlsm`:
+  the results Excel cached for each formula, images, charts, comments, form
+  controls and printer settings all survive untouched.
+- Rewrites the choices in a dropdown list when they are typed into the rule
+  itself, and tells you which files that happened in.
 - Skips Excel's `~$` lock files, and keeps going when one workbook is corrupt
   instead of aborting the whole batch.
 - Runs every CPU core in parallel.
@@ -33,8 +39,12 @@ and double-click it.
 ## What it does not do
 
 - It does not edit Word, PowerPoint, CSV, or ODS files.
-- It does not change numbers, dates, or formula *results* — only text.
-- It does not undo a run for you. That is what the `.bak` backups are for.
+- It does not change numbers, dates, or formula *results* — only text. The value
+  Excel last calculated for a formula is carried over untouched, so a program
+  reading the file afterwards still sees it.
+- It does not recalculate anything. It has no formula engine and never needs one,
+  because it does not disturb the results that are already in the file.
+- It does not undo a run for you. That is what the backup folder is for.
 
 ---
 
@@ -202,14 +212,28 @@ invoices/
 - **On (default):** all three files are processed, `archive/2023.xlsx` included.
 - **Off:** only `jan.xlsx` and `feb.xlsx`; the `archive` folder is skipped.
 
-#### `Keep .bak backup` — your way back
+#### `Keep a backup copy` — your way back
 
-- **On (default):** every file that changes gets a copy saved beside it first, so
-  the folder ends up with `jan.xlsx` (changed) and `jan.xlsx.bak` (the original).
-  To undo, delete the changed file and rename the `.bak` back.
+- **On (default):** before anything is written, every file that is about to change
+  is copied into one folder named `Excel-Mass-Replacer-Backup`, inside a sub-folder
+  named for the date and time of the run. Each copy keeps its real name and its
+  place in your sub-folders, so the backup is a plain mirror of the originals:
+
+  ```
+  PO 2026/
+    jan.xlsx                     <- changed
+    archive/feb.xlsx             <- changed
+    Excel-Mass-Replacer-Backup/
+      20261004-210145/
+        jan.xlsx                 <- the original, openable as it is
+        archive/feb.xlsx
+  ```
+
+  To undo, copy the files back over the changed ones. There is nothing to rename.
 - **Off:** no copies are kept and the change cannot be undone from inside the tool.
 
-Files with no match are never rewritten, so they never get a `.bak` either.
+Files with no match are never rewritten, so they are never copied either. A later
+run skips the backup folder, so your backups are never themselves replaced.
 
 ### On your first run
 
@@ -263,7 +287,8 @@ copy of a few files before pointing it at the real folder.
 |---|---|
 | `-d`, `--dir PATH` | Folder (or one file) to process. Default: the current folder. |
 | `--apply` | Actually write the changes. Without it, the run is a preview. |
-| `--no-backup` | Do not keep a `.bak` copy of each changed file. |
+| `--no-backup` | Do not copy the originals anywhere before changing them. |
+| `--backup-dir PATH` | Put the copies here instead of in a timestamped `Excel-Mass-Replacer-Backup` folder inside the scanned folder. |
 | `--no-recursive` | Stay in the given folder, do not descend into subfolders. |
 | `-i`, `--ignore-case` | Match regardless of upper/lower case. |
 | `-w`, `--whole-cell` | Only replace when the whole cell equals the search text. |
@@ -310,32 +335,59 @@ for result in summary.failed_files:
 
 ## How it works
 
-`.xlsx` and `.xlsm` files are ZIP archives full of XML; `.xls` is a binary
-spreadsheet format. Both are read directly — with
-[openpyxl](https://openpyxl.readthedocs.io/) and
+`.xlsx` and `.xlsm` files are ZIP archives full of XML. The tool opens the archive
+itself, using nothing but the Python standard library, and edits the XML parts that
+hold text: the shared string table, any inline strings, the typed-in choices of a
+dropdown list, and formulas when you ask for those. A part with nothing to replace
+is copied across byte for byte, which is why everything else in the workbook comes
+out identical. That is a deliberate choice over loading the workbook into a library
+and saving it again, since saving it again means rebuilding it from whatever the
+library understands and quietly losing the rest.
+
+`.xls` is a binary format from an older Excel and is handled separately, through
 [xlrd](https://xlrd.readthedocs.io/) / [xlwt](https://xlwt.readthedocs.io/) /
-[xlutils](https://xlutils.readthedocs.io/) respectively — so no Excel process, no COM
-automation, and no GUI is ever involved. Each file is written to a temporary file
-first and then swapped into place atomically, so an interrupted run cannot leave you
-with a half-written workbook.
+[xlutils](https://xlutils.readthedocs.io/). That path does rebuild the workbook.
+
+No Excel process, no COM automation, and no GUI is ever involved. Each file is
+written to a temporary file first and then swapped into place atomically, so an
+interrupted run cannot leave you with a half-written workbook.
 
 ## Please read this before running `--apply` on files you care about
 
-The tool rewrites a workbook by parsing it and saving it again. Cell values, number
-formats, fonts, fills, column widths and `.xlsm` macros survive that round trip, but
-a few things that openpyxl cannot currently read back **are lost on any file the tool
-changes**:
+An `.xlsx` or `.xlsm` file is a ZIP of XML parts. This tool opens that ZIP, rewrites
+only the text nodes that actually change, and copies every other byte straight
+through. Anything it does not understand is therefore carried over exactly: the
+value Excel cached for each formula, images, charts, pivot tables, comments, form
+controls, printer settings and macros.
 
-- charts and embedded images
-- pivot tables and slicers
-- cell comments / notes
-- data validation in some older files
+It did not always work this way. Until this was fixed, the tool loaded each workbook
+through openpyxl and saved it again, which rebuilt the file from what openpyxl could
+model and silently dropped the rest. The text came out right, so the damage was easy
+to miss: a purchase order would keep its wording and lose its logo, and every formula
+kept its formula while losing the number Excel had worked out, which is the number
+every *other* program reads. Files looked fine opened by hand in Excel, because Excel
+recalculates on open, and came back empty to anything reading them automatically.
+
+**Legacy `.xls` is still the old story.** Those files go through xlrd/xlwt, which
+does rebuild the workbook, so the caveats above still apply to `.xls` only.
 
 Files with **no** match are never rewritten at all, so they are never affected.
 
-This is why backups are on by default. **Try it on a copy of your folder first**, and
-keep the `.bak` files until you have checked the result. If your workbooks contain
-charts or pivot tables, this tool is not the right one for them.
+Backups are still on by default, and **trying it on a copy of your folder first is
+still the right habit.**
+
+### Dropdown lists
+
+A dropdown whose choices come from cells (`$A$1:$A$9`, or `Supplier!$A$2:$A$371` on
+another sheet) needs nothing special: its text lives in those cells and is replaced
+along with everything else, so the dropdown follows automatically.
+
+A dropdown whose choices are **typed into the validation rule itself** is different.
+That text is part of a rule, not a cell, so the tool rewrites it and then says so in
+the report, naming each file. Treat that line as something to check: changing it
+changes what people are allowed to enter, not just what they can read. Leave it
+unchanged and you get the opposite problem, a cell holding a value its own dropdown
+no longer offers, which only shows up when somebody next uses that dropdown.
 
 Two smaller notes:
 

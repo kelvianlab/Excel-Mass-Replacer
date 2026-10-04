@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 from . import __version__
-from .core import Rule, RunSummary, discover_files, run
+from .core import BACKUP_DIR_NAME, Rule, RunSummary, discover_files, run
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -45,7 +45,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--no-backup",
         action="store_true",
-        help="do not keep a .bak copy of each changed file (only with --apply)",
+        help="do not keep a copy of each changed file (only with --apply)",
+    )
+    parser.add_argument(
+        "--backup-dir",
+        metavar="PATH",
+        help=(
+            "folder the untouched originals are copied into, keeping their own "
+            "names and sub-folders; defaults to a timestamped folder named "
+            f"{BACKUP_DIR_NAME} inside the scanned folder"
+        ),
     )
     parser.add_argument(
         "--no-recursive",
@@ -156,8 +165,20 @@ def print_report(summary: RunSummary, applied: bool, quiet: bool) -> None:
     print(f"Files with matches: {len(summary.changed_files)}")
     print(f"Cells matched     : {summary.total_cells}")
     print(f"Replacements      : {summary.total_replacements}")
+    if summary.total_dropdown_lists:
+        print(f"Dropdown lists    : {summary.total_dropdown_lists}")
     if summary.failed_files:
         print(f"Files failed      : {len(summary.failed_files)}")
+    if summary.backup_dir:
+        print(f"Originals kept in : {summary.backup_dir}")
+    if summary.total_dropdown_lists:
+        print()
+        print(
+            "Some dropdown lists had their choices rewritten. That changes a "
+            "validation rule, not just text, so check those files:"
+        )
+        for result in summary.files_with_dropdown_changes:
+            print(f"  {result.path}: {result.dropdown_lists} list(s)")
     if not applied:
         print()
         print("Preview only — nothing was written. Re-run with --apply to save changes.")
@@ -206,6 +227,7 @@ def main(argv: list[str] | None = None) -> int:
         include_formulas=args.include_formulas,
         include_sheet_names=args.sheet_names,
         workers=args.workers,
+        backup_dir=Path(args.backup_dir) if args.backup_dir else None,
     )
     elapsed = time.perf_counter() - started
 

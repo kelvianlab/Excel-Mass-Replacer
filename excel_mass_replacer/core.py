@@ -12,6 +12,7 @@ import shutil
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Callable, Iterable, Iterator, Sequence
 
@@ -20,6 +21,10 @@ XLS_SUFFIXES = {".xls"}
 SUPPORTED_SUFFIXES = XLSX_SUFFIXES | XLS_SUFFIXES
 
 SKIP_PREFIXES = ("~$",)
+
+#: One folder holds every backup a run makes, as ordinary workbooks under their
+#: own names, rather than scattering .bak files beside the originals.
+BACKUP_DIR_NAME = "Excel-Mass-Replacer-Backup"
 
 
 @dataclass
@@ -57,6 +62,10 @@ class FileResult:
     replacements: int = 0
     cells: int = 0
     sheets_touched: list[str] = field(default_factory=list)
+    #: Dropdown lists whose choices are typed into the rule itself and were
+    #: rewritten. Reported separately because changing them changes a
+    #: validation rule, not just text somebody can see.
+    dropdown_lists: int = 0
     written: bool = False
     backup: Path | None = None
     error: str | None = None
@@ -70,6 +79,8 @@ class FileResult:
 @dataclass
 class RunSummary:
     results: list[FileResult] = field(default_factory=list)
+    #: The one folder this run put its backups in, or None when none was kept.
+    backup_dir: Path | None = None
 
     @property
     def total_replacements(self) -> int:
@@ -78,6 +89,14 @@ class RunSummary:
     @property
     def total_cells(self) -> int:
         return sum(r.cells for r in self.results)
+
+    @property
+    def total_dropdown_lists(self) -> int:
+        return sum(r.dropdown_lists for r in self.results)
+
+    @property
+    def files_with_dropdown_changes(self) -> list[FileResult]:
+        return [r for r in self.results if r.dropdown_lists]
 
     @property
     def changed_files(self) -> list[FileResult]:
@@ -112,6 +131,8 @@ def discover_files(
             continue
         if path.name.startswith(SKIP_PREFIXES):
             continue
+        if BACKUP_DIR_NAME in path.parts[:-1]:
+            continue  # never re-process what an earlier run saved as a backup
         if include and not any(fnmatch.fnmatch(path.name, pat) for pat in include):
             continue
         if exclude and any(fnmatch.fnmatch(path.name, pat) for pat in exclude):
@@ -128,70 +149,89 @@ def _replace_text(text: str, rules: Sequence[CompiledRule]) -> tuple[str, int]:
     return text, total
 
 
-def _backup_path(path: Path) -> Path:
-    candidate = path.with_suffix(path.suffix + ".bak")
-    counter = 1
-    while candidate.exists():
-        candidate = path.with_suffix(f"{path.suffix}.bak{counter}")
-        counter += 1
-    return candidate
+def _run_stamp() -> str:
+    return datetime.now().strftime("%Y%m%d-%H%M%S")
+
+
+def _common_base(files: Sequence[Path]) -> Path:
+    parents = [Path(f).resolve().parent for f in files]
+    try:
+        return Path(os.path.commonpath([str(p) for p in parents]))
+    except ValueError:  # different drives have no shared root
+        return parents[0]
+
+
+def plan_backups(
+    files: Sequence[Path], backup_dir: Path | None = None
+) -> tuple[Path, dict[Path, Path]]:
+    """Work out where each file's backup copy goes.
+
+    Every copy keeps its real name and its position relative to the folder that
+    was scanned, so the backup folder is a plain mirror somebody can open, copy
+    back, or hand to Excel without renaming anything first.
+    """
+    files = [Path(f) for f in files]
+    base = _common_base(files)
+    root = Path(backup_dir) if backup_dir else base / BACKUP_DIR_NAME / _run_stamp()
+    root = root.resolve()
+
+    plan: dict[Path, Path] = {}
+    for path in files:
+        resolved = path.resolve()
+        try:
+            relative = resolved.relative_to(base)
+        except ValueError:
+            relative = Path(resolved.name)
+        plan[path] = root / relative
+    return root, plan
+
+
+def _default_backup_target(path: Path) -> Path:
+    return path.resolve().parent / BACKUP_DIR_NAME / _run_stamp() / path.name
 
 
 def _process_xlsx(
     path: Path,
     rules: Sequence[CompiledRule],
     apply: bool,
-    backup: bool,
+    backup_to: Path | None,
     include_formulas: bool,
     include_sheet_names: bool,
 ) -> FileResult:
-    import openpyxl
+    """Edit the workbook's XML in place of rebuilding it.
+
+    Everything this tool has no business touching, above all the cached results
+    Excel stored for each formula, stays exactly as it was found.
+    """
+    from . import xlsx_edit
 
     result = FileResult(path=path)
-    workbook = openpyxl.load_workbook(
-        path, keep_vba=path.suffix.lower() == ".xlsm", data_only=False, rich_text=False
-    )
-    try:
-        for sheet in workbook.worksheets:
-            sheet_hits = 0
-            for row in sheet.iter_rows():
-                for cell in row:
-                    value = cell.value
-                    if not isinstance(value, str):
-                        continue
-                    if value.startswith("=") and not include_formulas:
-                        continue
-                    new_value, count = _replace_text(value, rules)
-                    if count:
-                        sheet_hits += count
-                        result.cells += 1
-                        cell.value = new_value
-            if include_sheet_names:
-                new_title, count = _replace_text(sheet.title, rules)
-                if count and new_title and new_title != sheet.title:
-                    sheet.title = new_title
-                    sheet_hits += count
-            if sheet_hits:
-                result.replacements += sheet_hits
-                result.sheets_touched.append(sheet.title)
+    parts, report = xlsx_edit.rewrite(path, rules, include_formulas, include_sheet_names)
 
-        if result.replacements and apply:
-            result.backup = _save_in_place(workbook.save, path, backup)
-            result.written = True
-    finally:
-        workbook.close()
+    result.replacements = report.replacements
+    result.cells = report.cells
+    result.sheets_touched = report.sheets_touched
+    result.dropdown_lists = report.dropdown_lists
+
+    if report.replacements and apply:
+        result.backup = _save_in_place(
+            lambda target: xlsx_edit.write_package(parts, target), path, backup_to
+        )
+        result.written = True
     return result
 
 
-def _save_in_place(save, path: Path, backup: bool) -> Path | None:
+def _save_in_place(save, path: Path, backup_to: Path | None) -> Path | None:
     """Write to a sibling temp file first, so a failure leaves the original intact."""
     tmp = path.with_name(path.name + ".emr-tmp")
     backup_path = None
     try:
         save(tmp)
-        if backup:
-            backup_path = _backup_path(path)
-            shutil.copy2(path, backup_path)
+        if backup_to is not None:
+            backup_to = Path(backup_to)
+            backup_to.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, backup_to)
+            backup_path = backup_to
         os.replace(tmp, path)
     except BaseException:
         tmp.unlink(missing_ok=True)
@@ -217,7 +257,7 @@ def _process_xls(
     path: Path,
     rules: Sequence[CompiledRule],
     apply: bool,
-    backup: bool,
+    backup_to: Path | None,
     include_formulas: bool,
     include_sheet_names: bool,
 ) -> FileResult:
@@ -263,7 +303,7 @@ def _process_xls(
 
     if out_book is not None:
         result.backup = _save_in_place(
-            lambda target: out_book.save(str(target)), path, backup
+            lambda target: out_book.save(str(target)), path, backup_to
         )
         result.written = True
 
@@ -279,19 +319,30 @@ def process_file(
     backup: bool = True,
     include_formulas: bool = False,
     include_sheet_names: bool = False,
+    backup_to: Path | None = None,
 ) -> FileResult:
-    """Run every rule over one workbook. Never raises: errors land in the result."""
+    """Run every rule over one workbook. Never raises: errors land in the result.
+
+    *backup_to* is the exact path the untouched original is copied to. A whole
+    run shares one backup folder, which :func:`run` works out once; calling
+    this directly without one falls back to a folder beside the file.
+    """
     path = Path(path)
+    if not backup:
+        backup_to = None
+    elif backup_to is None:
+        backup_to = _default_backup_target(path)
+
     compiled = [rule.compile() for rule in rules]
     suffix = path.suffix.lower()
     try:
         if suffix in XLSX_SUFFIXES:
             return _process_xlsx(
-                path, compiled, apply, backup, include_formulas, include_sheet_names
+                path, compiled, apply, backup_to, include_formulas, include_sheet_names
             )
         if suffix in XLS_SUFFIXES:
             return _process_xls(
-                path, compiled, apply, backup, include_formulas, include_sheet_names
+                path, compiled, apply, backup_to, include_formulas, include_sheet_names
             )
         return FileResult(path=path, skipped_reason=f"unsupported file type {suffix}")
     except Exception as exc:  # one bad workbook must not stop the batch
@@ -299,8 +350,16 @@ def process_file(
 
 
 def _worker(args) -> FileResult:
-    path, rules, apply, backup, include_formulas, include_sheet_names = args
-    return process_file(path, rules, apply, backup, include_formulas, include_sheet_names)
+    path, rules, apply, backup, include_formulas, include_sheet_names, backup_to = args
+    return process_file(
+        path,
+        rules,
+        apply,
+        backup,
+        include_formulas,
+        include_sheet_names,
+        backup_to,
+    )
 
 
 def run(
@@ -312,8 +371,14 @@ def run(
     include_sheet_names: bool = False,
     workers: int | None = None,
     progress: Callable[[FileResult], None] | None = None,
+    backup_dir: Path | None = None,
 ) -> RunSummary:
-    """Process every file, in parallel when there is enough work to justify it."""
+    """Process every file, in parallel when there is enough work to justify it.
+
+    All backups from one run land together in a single folder, as ordinary
+    workbooks keeping their own names and their position under the scanned
+    folder.
+    """
     summary = RunSummary()
     if not files:
         return summary
@@ -322,8 +387,20 @@ def run(
         workers = min(len(files), (os.cpu_count() or 2))
     workers = max(1, min(workers, len(files)))
 
+    plan: dict[Path, Path] = {}
+    if backup and apply:
+        summary.backup_dir, plan = plan_backups(files, backup_dir)
+
     payload = [
-        (Path(f), list(rules), apply, backup, include_formulas, include_sheet_names)
+        (
+            Path(f),
+            list(rules),
+            apply,
+            backup,
+            include_formulas,
+            include_sheet_names,
+            plan.get(Path(f)),
+        )
         for f in files
     ]
 

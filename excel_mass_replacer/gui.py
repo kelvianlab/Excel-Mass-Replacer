@@ -10,7 +10,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from . import __version__
-from .core import Rule, RunSummary, discover_files, run
+from .core import BACKUP_DIR_NAME, Rule, RunSummary, discover_files, run
 
 
 class App(tk.Tk):
@@ -65,9 +65,9 @@ class App(tk.Tk):
         ttk.Checkbutton(options, text="Whole cell only", variable=self.whole_cell).pack(
             side="left", padx=6
         )
-        ttk.Checkbutton(options, text="Keep .bak backup", variable=self.backup).pack(
-            side="left", padx=6
-        )
+        ttk.Checkbutton(
+            options, text="Keep a backup copy", variable=self.backup
+        ).pack(side="left", padx=6)
 
         buttons = ttk.Frame(self)
         buttons.pack(fill="x", **pad)
@@ -130,7 +130,8 @@ class App(tk.Tk):
             f"Find:    {self.find_text.get()}\n"
             f"Replace: {self.replace_text.get()}\n\n"
             + (
-                "A .bak backup will be kept next to each changed file."
+                f'Every original will be copied into a "{BACKUP_DIR_NAME}" '
+                "folder first, under its own name."
                 if self.backup.get()
                 else "No backup will be kept. This cannot be undone."
             )
@@ -211,8 +212,17 @@ class App(tk.Tk):
             f"{summary.total_cells} cell(s) across "
             f"{len(summary.changed_files)} file(s) — {elapsed:.2f}s"
         )
+        if summary.total_dropdown_lists:
+            self._write_log(
+                f"{summary.total_dropdown_lists} dropdown list(s) in "
+                f"{len(summary.files_with_dropdown_changes)} file(s) had their "
+                "choices rewritten — that changes a validation rule, so check "
+                "those files."
+            )
         if summary.failed_files:
             self._write_log(f"{len(summary.failed_files)} file(s) could not be processed.")
+        if summary.backup_dir:
+            self._write_log(f"Originals kept in: {summary.backup_dir}")
         if not apply:
             self._write_log('Preview only — press "Replace now" to save these changes.')
         self.status.set(

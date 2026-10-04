@@ -65,7 +65,11 @@ def test_apply_writes_and_backs_up_from_worker_thread(app, one_file):
     assert openpyxl.load_workbook(one_file / "demo.xlsx").active["A1"].value == (
         "Globex Holdings"
     )
-    assert (one_file / "demo.xlsx.bak").exists()
+    from excel_mass_replacer.core import BACKUP_DIR_NAME
+
+    copies = list((one_file / BACKUP_DIR_NAME).rglob("demo.xlsx"))
+    assert copies, "the original should be kept in the backup folder"
+    assert not list(one_file.glob("*.bak"))
 
 
 def test_buttons_are_re_enabled_after_a_run(app, one_file):
