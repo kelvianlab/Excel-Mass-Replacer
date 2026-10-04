@@ -21,7 +21,10 @@ and double-click it.
 
 - Replaces a word or sentence with another one in **every** Excel file in a folder
   (and its subfolders, unless you say otherwise).
-- Handles `.xlsx`, `.xlsm` (macro-enabled, macros kept) and legacy `.xls`.
+- Handles `.xlsx` and `.xlsm` (macro-enabled, macros kept) with nothing else in
+  the file disturbed. Legacy `.xls` works too, but is rebuilt rather than edited
+  in place — see [the warning below](#please-read-this-before-running---apply-on-files-you-care-about)
+  before using it on anything you cannot replace.
 - **Previews by default.** Nothing is written until you explicitly ask for it.
 - Copies every file it changes into one backup folder first, under its own name,
   unless you turn that off.
